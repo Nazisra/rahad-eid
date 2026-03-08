@@ -1,14 +1,19 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = true;
+const touchControls = document.getElementById("touchControls");
+const btnLeft = document.getElementById("btnLeft");
+const btnRight = document.getElementById("btnRight");
+const btnAction = document.getElementById("btnAction");
 
 const IS_TOUCH_DEVICE = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 const IS_MOBILE_VIEW = Math.min(window.innerWidth, window.innerHeight) <= 900;
 const LOW_PERF_MODE = IS_TOUCH_DEVICE || IS_MOBILE_VIEW;
+const USE_TOUCH_BUTTONS = IS_TOUCH_DEVICE;
 
 if (IS_MOBILE_VIEW) {
-	canvas.width = 720;
-	canvas.height = 500;
+	canvas.width = 540;
+	canvas.height = 900;
 } else {
 	canvas.width = 900;
 	canvas.height = 450;
@@ -53,6 +58,8 @@ const TOUCH_SENSITIVITY = LOW_PERF_MODE ? 72 : 120;
 const TOUCH_DEADZONE = LOW_PERF_MODE ? 0.025 : 0.06;
 const TOUCH_SPEED_BOOST = LOW_PERF_MODE ? 1.22 : 1;
 const PLAYER_SPEED_BOOST = LOW_PERF_MODE ? 1.18 : 1;
+const PLAYER_SIZE_MUL = IS_MOBILE_VIEW ? 1.24 : 1;
+const PLAYER_BOTTOM_PADDING = IS_MOBILE_VIEW ? 18 : 10;
 
 const game = {
 	state: "ready",
@@ -95,10 +102,13 @@ const game = {
 const player = {
 	x: W * 0.5 - 42,
 	y: H - 74,
-	w: 84,
-	h: 64,
+	w: 84 * PLAYER_SIZE_MUL,
+	h: 64 * PLAYER_SIZE_MUL,
 	vx: 0
 };
+
+player.x = W * 0.5 - player.w * 0.5;
+player.y = H - player.h - PLAYER_BOTTOM_PADDING;
 
 const keys = {
 	left: false,
@@ -129,9 +139,9 @@ function initVisualScene() {
 	ambientLights = [];
 	fogBands = [];
 	weatherDrops = [];
-	const lightCount = LOW_PERF_MODE ? 10 : 18;
-	const fogCount = LOW_PERF_MODE ? 3 : 4;
-	const weatherCount = LOW_PERF_MODE ? 36 : 80;
+	const lightCount = LOW_PERF_MODE ? 6 : 18;
+	const fogCount = LOW_PERF_MODE ? 2 : 4;
+	const weatherCount = LOW_PERF_MODE ? 20 : 80;
 	for (let i = 0; i < lightCount; i++) {
 		ambientLights.push({
 			x: randomRange(0, W),
@@ -447,6 +457,7 @@ function resetGame() {
 	particles = [];
 	cashPopups = [];
 	player.x = W * 0.5 - player.w * 0.5;
+	player.y = H - player.h - PLAYER_BOTTOM_PADDING;
 	player.vx = 0;
 	setMessage(`${game.playerName || PLAYER_NAME} এর ${diff.label} মোড শুরু!`, 2.2);
 	bgMusic.currentTime = 0;
@@ -1019,7 +1030,7 @@ function drawOverlay() {
 	ctx.fillStyle = "rgba(0,0,0,0.60)";
 	ctx.fillRect(0, 0, W, H);
 
-	const cardW = 650;
+	const cardW = Math.min(650, W - 28);
 	const cardH = game.state === "over" ? 350 : 320;
 	const cardX = (W - cardW) * 0.5;
 	const cardY = (H - cardH) * 0.5;
@@ -1034,12 +1045,12 @@ function drawOverlay() {
 	ctx.textAlign = "center";
 	ctx.shadowColor = "rgba(0,0,0,0.8)";
 	ctx.shadowBlur = 8;
-	ctx.font = `bold 46px ${UI_FONT}`;
+	ctx.font = `bold ${W < 700 ? 36 : 46}px ${UI_FONT}`;
 	if (game.state === "ready") ctx.fillText("ঈদ সালামি ধরো", W * 0.5, cardY + 58);
 	if (game.state === "paused") ctx.fillText("বিরতি", W * 0.5, cardY + 58);
 	if (game.state === "over") ctx.fillText("খেলা শেষ", W * 0.5, cardY + 58);
 
-	ctx.font = `bold 22px ${UI_FONT}`;
+	ctx.font = `bold ${W < 700 ? 19 : 22}px ${UI_FONT}`;
 	if (game.state === "ready") {
 		ctx.fillStyle = "#bfdbfe";
 		ctx.fillText(` dev Author : ${PLAYER_NAME}`, W * 0.5, cardY + 98);
@@ -1048,15 +1059,21 @@ function drawOverlay() {
 		ctx.fillText("N চাপলে নতুন নাম দিন", W * 0.5, cardY + 154);
 		ctx.fillText("মোড বেছে নিন:", W * 0.5, cardY + 180);
 
-		drawUIBtn(cardX + 115, cardY + 196, 120, 44, "সহজ", game.diffLevel === 1);
-		drawUIBtn(cardX + 265, cardY + 196, 120, 44, "নরমাল", game.diffLevel === 2);
-		drawUIBtn(cardX + 415, cardY + 196, 120, 44, "কঠিন", game.diffLevel === 3);
-		setUIButton("diff1", cardX + 115, cardY + 196, 120, 44);
-		setUIButton("diff2", cardX + 265, cardY + 196, 120, 44);
-		setUIButton("diff3", cardX + 415, cardY + 196, 120, 44);
+		const diffGap = 14;
+		const sidePad = 18;
+		const diffW = (cardW - sidePad * 2 - diffGap * 2) / 3;
+		const diffY = cardY + 196;
+		drawUIBtn(cardX + sidePad, diffY, diffW, 44, "সহজ", game.diffLevel === 1);
+		drawUIBtn(cardX + sidePad + diffW + diffGap, diffY, diffW, 44, "নরমাল", game.diffLevel === 2);
+		drawUIBtn(cardX + sidePad + (diffW + diffGap) * 2, diffY, diffW, 44, "কঠিন", game.diffLevel === 3);
+		setUIButton("diff1", cardX + sidePad, diffY, diffW, 44);
+		setUIButton("diff2", cardX + sidePad + diffW + diffGap, diffY, diffW, 44);
+		setUIButton("diff3", cardX + sidePad + (diffW + diffGap) * 2, diffY, diffW, 44);
 
-		drawUIBtn(cardX + 225, cardY + 250, 200, 54, "খেলা শুরু", true);
-		setUIButton("start", cardX + 225, cardY + 250, 200, 54);
+		const startW = Math.min(220, cardW - 70);
+		const startX = cardX + (cardW - startW) * 0.5;
+		drawUIBtn(startX, cardY + 250, startW, 54, "খেলা শুরু", true);
+		setUIButton("start", startX, cardY + 250, startW, 54);
 	}
 
 	if (game.state === "paused") {
@@ -1173,7 +1190,7 @@ function render() {
 }
 
 function frame(now) {
-	const dt = clamp((now - lastTime) / 1000, 0, 0.025);
+	const dt = clamp((now - lastTime) / 1000, 0, LOW_PERF_MODE ? 0.02 : 0.025);
 	lastTime = now;
 	updateVisualScene(dt);
 
@@ -1300,6 +1317,7 @@ canvas.addEventListener("pointerdown", (e) => {
 		handleOverlayPointer(p.x, p.y);
 		return;
 	}
+	if (USE_TOUCH_BUTTONS) return;
 	touchMoveActive = true;
 	activePointerId = e.pointerId;
 	try {
@@ -1309,6 +1327,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
+	if (USE_TOUCH_BUTTONS) return;
 	if (activePointerId !== null && e.pointerId !== activePointerId) return;
 	if (!touchMoveActive || game.state !== "running") return;
 	const p = getCanvasCoords(e);
@@ -1338,6 +1357,7 @@ canvas.addEventListener("pointerout", () => {
 
 if (!window.PointerEvent) {
 	canvas.addEventListener("touchstart", (e) => {
+		if (USE_TOUCH_BUTTONS) return;
 		const t = e.touches[0];
 		if (!t) return;
 		const p = getCanvasCoords(t);
@@ -1350,6 +1370,7 @@ if (!window.PointerEvent) {
 	}, { passive: true });
 
 	canvas.addEventListener("touchmove", (e) => {
+		if (USE_TOUCH_BUTTONS) return;
 		if (!touchMoveActive || game.state !== "running") return;
 		const t = e.touches[0];
 		if (!t) return;
@@ -1359,6 +1380,52 @@ if (!window.PointerEvent) {
 
 	canvas.addEventListener("touchend", clearTouchInput, { passive: true });
 	canvas.addEventListener("touchcancel", clearTouchInput, { passive: true });
+}
+
+function setTouchBtnPressed(button, pressed) {
+	if (!button) return;
+	button.classList.toggle("pressed", pressed);
+}
+
+function bindTouchHoldButton(button, key) {
+	if (!button) return;
+	button.addEventListener("pointerdown", (e) => {
+		e.preventDefault();
+		setTouchBtnPressed(button, true);
+		keys[key] = true;
+		try {
+			button.setPointerCapture(e.pointerId);
+		} catch {}
+	}, { passive: false });
+
+	const release = () => {
+		keys[key] = false;
+		setTouchBtnPressed(button, false);
+	};
+
+	button.addEventListener("pointerup", release);
+	button.addEventListener("pointercancel", release);
+	button.addEventListener("pointerleave", release);
+	button.addEventListener("lostpointercapture", release);
+}
+
+if (USE_TOUCH_BUTTONS && touchControls) {
+	touchControls.style.display = "flex";
+	bindTouchHoldButton(btnLeft, "left");
+	bindTouchHoldButton(btnRight, "right");
+
+	if (btnAction) {
+		btnAction.addEventListener("click", (e) => {
+			e.preventDefault();
+			if (game.state === "running") {
+				game.state = "paused";
+				setMessage("বিরতি", 9999);
+				bgMusic.pause();
+			} else {
+				handleAction();
+			}
+		});
+	}
 }
 
 initVisualScene();

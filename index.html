@@ -37,6 +37,10 @@ text-align:center;
 overflow:hidden;
 }
 
+.touch-controls{
+	display:none;
+}
+
 h1{
 margin:0 0 4px 0;
 font-size:clamp(26px,3.2vw,48px);
@@ -71,16 +75,17 @@ user-select:none;
 @media (max-width: 900px){
 	body{
 		align-items:stretch;
-		justify-content:flex-start;
+		justify-content:center;
 	}
 	.game-shell{
-		width:100vw;
+		width:min(430px,94vw);
 		min-height:100vh;
 		max-height:100vh;
-		padding:8px;
-		border-radius:0;
-		border-left:none;
-		border-right:none;
+		padding:8px 8px 10px;
+		border-radius:14px;
+		display:flex;
+		flex-direction:column;
+		gap:6px;
 	}
 	h1{
 		margin-bottom:2px;
@@ -92,8 +97,36 @@ user-select:none;
 	}
 	canvas{
 		width:100%;
-		max-height:calc(100vh - 108px);
+		max-height:calc(100vh - 230px);
+		aspect-ratio:9 / 16;
 		border-width:2px;
+	}
+	.touch-controls{
+		display:flex;
+		gap:8px;
+		width:100%;
+		height:74px;
+		margin-top:auto;
+	}
+	.touch-btn{
+		flex:1;
+		border:1px solid rgba(255,255,255,.28);
+		border-radius:12px;
+		background:rgba(15,23,42,.82);
+		color:#f8fafc;
+		font-size:clamp(18px,5vw,24px);
+		font-weight:700;
+		touch-action:none;
+		user-select:none;
+	}
+	.touch-btn:active,
+	.touch-btn.pressed{
+		background:rgba(16,185,129,.32);
+		border-color:rgba(16,185,129,.92);
+	}
+	#btnAction{
+		flex:1.1;
+		font-size:clamp(14px,3.6vw,18px);
 	}
 }
 </style>
@@ -107,6 +140,12 @@ user-select:none;
 <p>Windows: ← → / A D · Android: Touch control · Space = শুরু/বিরতি · R = নতুন খেলা</p>
 
 <canvas id="gameCanvas" width="900" height="450"></canvas>
+
+<div class="touch-controls" id="touchControls" aria-label="Touch controls">
+	<button class="touch-btn" id="btnLeft" type="button">◀ বাম</button>
+	<button class="touch-btn" id="btnAction" type="button">শুরু / বিরতি</button>
+	<button class="touch-btn" id="btnRight" type="button">ডান ▶</button>
+</div>
 </div>
 
 <script src="game.js"></script>
