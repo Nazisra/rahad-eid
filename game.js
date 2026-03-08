@@ -2,6 +2,18 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = true;
 
+const IS_TOUCH_DEVICE = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+const IS_MOBILE_VIEW = Math.min(window.innerWidth, window.innerHeight) <= 900;
+const LOW_PERF_MODE = IS_TOUCH_DEVICE || IS_MOBILE_VIEW;
+
+if (IS_MOBILE_VIEW) {
+	canvas.width = 720;
+	canvas.height = 500;
+} else {
+	canvas.width = 900;
+	canvas.height = 450;
+}
+
 const playerImg = new Image();
 playerImg.src = "assets/player.png";
 
@@ -35,6 +47,12 @@ const W = canvas.width;
 const H = canvas.height;
 const UI_FONT = '"Hind Siliguri", "Noto Sans Bengali", Arial, sans-serif';
 const PLAYER_NAME = "Nazmul Rahad";
+const MAX_PARTICLES = LOW_PERF_MODE ? 120 : 260;
+const MAX_DROPS = LOW_PERF_MODE ? 22 : 42;
+const TOUCH_SENSITIVITY = LOW_PERF_MODE ? 72 : 120;
+const TOUCH_DEADZONE = LOW_PERF_MODE ? 0.025 : 0.06;
+const TOUCH_SPEED_BOOST = LOW_PERF_MODE ? 1.22 : 1;
+const PLAYER_SPEED_BOOST = LOW_PERF_MODE ? 1.18 : 1;
 
 const game = {
 	state: "ready",
@@ -111,7 +129,10 @@ function initVisualScene() {
 	ambientLights = [];
 	fogBands = [];
 	weatherDrops = [];
-	for (let i = 0; i < 18; i++) {
+	const lightCount = LOW_PERF_MODE ? 10 : 18;
+	const fogCount = LOW_PERF_MODE ? 3 : 4;
+	const weatherCount = LOW_PERF_MODE ? 36 : 80;
+	for (let i = 0; i < lightCount; i++) {
 		ambientLights.push({
 			x: randomRange(0, W),
 			y: randomRange(0, H),
@@ -121,7 +142,7 @@ function initVisualScene() {
 			vy: randomRange(6, 18)
 		});
 	}
-	for (let i = 0; i < 4; i++) {
+	for (let i = 0; i < fogCount; i++) {
 		fogBands.push({
 			y: 60 + i * 90,
 			h: 60 + i * 10,
@@ -130,7 +151,7 @@ function initVisualScene() {
 			alpha: 0.05 + i * 0.02
 		});
 	}
-	for (let i = 0; i < 80; i++) {
+	for (let i = 0; i < weatherCount; i++) {
 		weatherDrops.push({
 			x: randomRange(0, W),
 			y: randomRange(0, H),
@@ -440,6 +461,8 @@ function updateBest() {
 }
 
 function spawnDrop() {
+	if (drops.length >= MAX_DROPS) return;
+
 	const diff = getDifficultySettings();
 	const levelFactor = clamp(game.level * 0.025, 0, 0.1);
 	const crowdBonus = game.crowdBoostTimer > 0 ? 0.05 : 0;
@@ -487,7 +510,9 @@ function spawnDrop() {
 }
 
 function addParticles(x, y, color, amount) {
-	for (let i = 0; i < amount; i++) {
+	if (particles.length >= MAX_PARTICLES) return;
+	const emitCount = Math.min(amount, MAX_PARTICLES - particles.length);
+	for (let i = 0; i < emitCount; i++) {
 		particles.push({
 			x,
 			y,
@@ -684,8 +709,8 @@ function updateRunning(dt) {
 	if (keys.right) dir += 1;
 	if (touchMoveActive && touchTargetX !== null) {
 		const touchDelta = touchTargetX - (player.x + player.w * 0.5);
-		const analogDir = clamp(touchDelta / 120, -1, 1);
-		dir = Math.abs(analogDir) < 0.06 ? 0 : analogDir;
+		const analogDir = clamp(touchDelta / TOUCH_SENSITIVITY, -1, 1);
+		dir = Math.abs(analogDir) < TOUCH_DEADZONE ? 0 : analogDir;
 	}
 	if (game.reverseTimer > 0) dir *= -1;
 
@@ -697,8 +722,9 @@ function updateRunning(dt) {
 	}
 	const dashMul = isDashing ? 1.45 : 1;
 
-	const accel = 1900 * dashMul;
-	const maxSpeed = 780 * dashMul;
+	const touchMul = touchMoveActive ? TOUCH_SPEED_BOOST : 1;
+	const accel = 1900 * dashMul * PLAYER_SPEED_BOOST * touchMul;
+	const maxSpeed = 780 * dashMul * PLAYER_SPEED_BOOST * touchMul;
 	player.vx += dir * accel * dt;
 	player.vx *= Math.pow(0.001, dt * 0.8);
 	player.vx = clamp(player.vx, -maxSpeed, maxSpeed);
@@ -709,9 +735,16 @@ function updateRunning(dt) {
 	const rushSpawnMul = game.rushTimer > 0 ? 0.86 : 1;
 	const spawnInterval = Math.max(0.34, (1.02 - game.level * 0.03) * crowdSpawnBoost * rushSpawnMul * diff.spawnMul);
 	game.spawnTimer -= dt;
+	let spawnSafety = 0;
+	const maxSpawnPerFrame = LOW_PERF_MODE ? 2 : 4;
 	while (game.spawnTimer <= 0) {
 		spawnDrop();
 		game.spawnTimer += spawnInterval * randomRange(0.9, 1.1);
+		spawnSafety += 1;
+		if (spawnSafety >= maxSpawnPerFrame) {
+			game.spawnTimer = Math.max(game.spawnTimer, spawnInterval * 0.25);
+			break;
+		}
 	}
 
 	const playerHitbox = {
@@ -847,10 +880,12 @@ function drawDrop(drop) {
 	ctx.globalAlpha = 0.22;
 	ctx.strokeStyle = drop.type === "bomb" ? "#ef4444" : "#a7f3d0";
 	ctx.lineWidth = 2;
-	ctx.beginPath();
-	ctx.moveTo(drop.px + drop.w * 0.5, drop.py + drop.h * 0.5);
-	ctx.lineTo(drop.x + drop.w * 0.5, drop.y + drop.h * 0.5);
-	ctx.stroke();
+	if (!LOW_PERF_MODE) {
+		ctx.beginPath();
+		ctx.moveTo(drop.px + drop.w * 0.5, drop.py + drop.h * 0.5);
+		ctx.lineTo(drop.x + drop.w * 0.5, drop.y + drop.h * 0.5);
+		ctx.stroke();
+	}
 	ctx.restore();
 
 	ctx.save();
@@ -1101,11 +1136,13 @@ function render() {
 	ctx.drawImage(playerImg, -player.w * 0.5, -player.h * 0.5, player.w, player.h);
 	ctx.restore();
 
-	const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, 110, W * 0.5, H * 0.5, W * 0.72);
-	vignette.addColorStop(0, "rgba(0,0,0,0)");
-	vignette.addColorStop(1, "rgba(0,0,0,0.28)");
-	ctx.fillStyle = vignette;
-	ctx.fillRect(0, 0, W, H);
+	if (!LOW_PERF_MODE) {
+		const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, 110, W * 0.5, H * 0.5, W * 0.72);
+		vignette.addColorStop(0, "rgba(0,0,0,0)");
+		vignette.addColorStop(1, "rgba(0,0,0,0.28)");
+		ctx.fillStyle = vignette;
+		ctx.fillRect(0, 0, W, H);
+	}
 
 	drawParticles();
 	drawCashPopups();
@@ -1120,8 +1157,10 @@ function render() {
 		ctx.fillRect(W * 0.5 - 290, slideY, 580, 62);
 		ctx.strokeStyle = "rgba(255,255,255,0.38)";
 		ctx.strokeRect(W * 0.5 - 290, slideY, 580, 62);
-		ctx.shadowColor = "rgba(0,0,0,0.9)";
-		ctx.shadowBlur = 6;
+		if (!LOW_PERF_MODE) {
+			ctx.shadowColor = "rgba(0,0,0,0.9)";
+			ctx.shadowBlur = 6;
+		}
 		ctx.fillStyle = "#ecfeff";
 		ctx.font = `bold 30px ${UI_FONT}`;
 		ctx.fillText(game.message, W * 0.5 - 265, slideY + 41);
