@@ -1007,7 +1007,7 @@ function drawOverlay() {
 	ctx.font = `bold 22px ${UI_FONT}`;
 	if (game.state === "ready") {
 		ctx.fillStyle = "#bfdbfe";
-		ctx.fillText(`আমি এটার ডেভেলপার: ${PLAYER_NAME}`, W * 0.5, cardY + 98);
+		ctx.fillText(` dev Author : ${PLAYER_NAME}`, W * 0.5, cardY + 98);
 		ctx.fillText(`খেলোয়াড়: ${game.playerName || "(নাম দিন)"}`, W * 0.5, cardY + 126);
 		ctx.fillStyle = "#ffffff";
 		ctx.fillText("N চাপলে নতুন নাম দিন", W * 0.5, cardY + 154);
