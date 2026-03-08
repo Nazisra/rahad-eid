@@ -41,7 +41,7 @@ const game = {
 	playerName: localStorage.getItem("eid-player-name") || "",
 	score: 0,
 	best: Number(localStorage.getItem("eid-catch-best-bn") || 0),
-	lives: 3,
+	lives: 5,
 	level: 1,
 	elapsed: 0,
 	combo: 0,
@@ -93,6 +93,8 @@ let particles = [];
 let cashPopups = [];
 let lastTime = performance.now();
 let touchMoveActive = false;
+let touchTargetX = null;
+let activePointerId = null;
 let ambientLights = [];
 let fogBands = [];
 let weatherDrops = [];
@@ -380,12 +382,12 @@ function getCanvasCoords(eventLike) {
 
 function getDifficultySettings() {
 	if (game.diffLevel === 1) {
-		return { label: "সহজ", lives: 3, spawnMul: 1.12, bombMul: 0.85, assistMul: 1.15 };
+		return { label: "সহজ", lives: 5, spawnMul: 1.12, bombMul: 0.85, assistMul: 1.15 };
 	}
 	if (game.diffLevel === 3) {
-		return { label: "কঠিন", lives: 3, spawnMul: 0.88, bombMul: 1.2, assistMul: 0.82 };
+		return { label: "কঠিন", lives: 5, spawnMul: 0.88, bombMul: 1.2, assistMul: 0.82 };
 	}
-	return { label: "নরমাল", lives: 3, spawnMul: 0.95, bombMul: 1.05, assistMul: 0.95 };
+	return { label: "নরমাল", lives: 5, spawnMul: 0.95, bombMul: 1.05, assistMul: 0.95 };
 }
 
 function resetGame() {
@@ -680,6 +682,11 @@ function updateRunning(dt) {
 	let dir = 0;
 	if (keys.left) dir -= 1;
 	if (keys.right) dir += 1;
+	if (touchMoveActive && touchTargetX !== null) {
+		const touchDelta = touchTargetX - (player.x + player.w * 0.5);
+		const analogDir = clamp(touchDelta / 120, -1, 1);
+		dir = Math.abs(analogDir) < 0.06 ? 0 : analogDir;
+	}
 	if (game.reverseTimer > 0) dir *= -1;
 
 	const isDashing = keys.dash && Math.abs(dir) > 0 && game.stamina > 1;
@@ -1156,18 +1163,15 @@ function handleAction() {
 }
 
 function setTouchDirectionByX(x) {
-	const center = W * 0.5;
-	const deadZone = 36;
-	if (x < center - deadZone) {
-		keys.left = true;
-		keys.right = false;
-	} else if (x > center + deadZone) {
-		keys.right = true;
-		keys.left = false;
-	} else {
-		keys.left = false;
-		keys.right = false;
-	}
+	touchTargetX = clamp(x, 0, W);
+}
+
+function clearTouchInput() {
+	touchMoveActive = false;
+	touchTargetX = null;
+	activePointerId = null;
+	keys.left = false;
+	keys.right = false;
 }
 
 function handleOverlayPointer(x, y) {
@@ -1258,26 +1262,65 @@ canvas.addEventListener("pointerdown", (e) => {
 		return;
 	}
 	touchMoveActive = true;
+	activePointerId = e.pointerId;
+	try {
+		canvas.setPointerCapture(e.pointerId);
+	} catch {}
 	setTouchDirectionByX(p.x);
 });
 
 canvas.addEventListener("pointermove", (e) => {
+	if (activePointerId !== null && e.pointerId !== activePointerId) return;
 	if (!touchMoveActive || game.state !== "running") return;
 	const p = getCanvasCoords(e);
 	setTouchDirectionByX(p.x);
 });
 
-canvas.addEventListener("pointerup", () => {
-	touchMoveActive = false;
-	keys.left = false;
-	keys.right = false;
+canvas.addEventListener("pointerup", (e) => {
+	if (activePointerId !== null && e.pointerId !== activePointerId) return;
+	try {
+		canvas.releasePointerCapture(e.pointerId);
+	} catch {}
+	clearTouchInput();
 });
 
-canvas.addEventListener("pointercancel", () => {
-	touchMoveActive = false;
-	keys.left = false;
-	keys.right = false;
+canvas.addEventListener("pointercancel", (e) => {
+	if (activePointerId !== null && e.pointerId !== activePointerId) return;
+	clearTouchInput();
 });
+
+canvas.addEventListener("pointerleave", () => {
+	if (game.state === "running") clearTouchInput();
+});
+
+canvas.addEventListener("pointerout", () => {
+	if (game.state === "running") clearTouchInput();
+});
+
+if (!window.PointerEvent) {
+	canvas.addEventListener("touchstart", (e) => {
+		const t = e.touches[0];
+		if (!t) return;
+		const p = getCanvasCoords(t);
+		if (game.state !== "running") {
+			handleOverlayPointer(p.x, p.y);
+			return;
+		}
+		touchMoveActive = true;
+		setTouchDirectionByX(p.x);
+	}, { passive: true });
+
+	canvas.addEventListener("touchmove", (e) => {
+		if (!touchMoveActive || game.state !== "running") return;
+		const t = e.touches[0];
+		if (!t) return;
+		const p = getCanvasCoords(t);
+		setTouchDirectionByX(p.x);
+	}, { passive: true });
+
+	canvas.addEventListener("touchend", clearTouchInput, { passive: true });
+	canvas.addEventListener("touchcancel", clearTouchInput, { passive: true });
+}
 
 initVisualScene();
 
