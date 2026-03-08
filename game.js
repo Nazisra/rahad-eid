@@ -1,6 +1,5 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = true;
 const touchControls = document.getElementById("touchControls");
 const btnLeft = document.getElementById("btnLeft");
 const btnRight = document.getElementById("btnRight");
@@ -9,15 +8,17 @@ const btnAction = document.getElementById("btnAction");
 const IS_TOUCH_DEVICE = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 const IS_MOBILE_VIEW = Math.min(window.innerWidth, window.innerHeight) <= 900;
 const LOW_PERF_MODE = IS_TOUCH_DEVICE || IS_MOBILE_VIEW;
-const USE_TOUCH_BUTTONS = IS_TOUCH_DEVICE;
+const USE_TOUCH_BUTTONS = false;
 
 if (IS_MOBILE_VIEW) {
-	canvas.width = 540;
-	canvas.height = 900;
+	canvas.width = 432;
+	canvas.height = 768;
 } else {
 	canvas.width = 900;
 	canvas.height = 450;
 }
+
+ctx.imageSmoothingEnabled = !LOW_PERF_MODE;
 
 const playerImg = new Image();
 playerImg.src = "assets/player.png";
@@ -52,14 +53,15 @@ const W = canvas.width;
 const H = canvas.height;
 const UI_FONT = '"Hind Siliguri", "Noto Sans Bengali", Arial, sans-serif';
 const PLAYER_NAME = "Nazmul Rahad";
-const MAX_PARTICLES = LOW_PERF_MODE ? 120 : 260;
-const MAX_DROPS = LOW_PERF_MODE ? 22 : 42;
-const TOUCH_SENSITIVITY = LOW_PERF_MODE ? 72 : 120;
+const MAX_PARTICLES = LOW_PERF_MODE ? 46 : 260;
+const MAX_DROPS = LOW_PERF_MODE ? 12 : 42;
+const TOUCH_SENSITIVITY = LOW_PERF_MODE ? 56 : 120;
 const TOUCH_DEADZONE = LOW_PERF_MODE ? 0.025 : 0.06;
 const TOUCH_SPEED_BOOST = LOW_PERF_MODE ? 1.22 : 1;
 const PLAYER_SPEED_BOOST = LOW_PERF_MODE ? 1.18 : 1;
 const PLAYER_SIZE_MUL = IS_MOBILE_VIEW ? 1.24 : 1;
 const PLAYER_BOTTOM_PADDING = IS_MOBILE_VIEW ? 18 : 10;
+const LOW_PERF_FRAME_MS = 1000 / 38;
 
 const game = {
 	state: "ready",
@@ -120,6 +122,7 @@ let drops = [];
 let particles = [];
 let cashPopups = [];
 let lastTime = performance.now();
+let lastLowPerfFrameTime = 0;
 let touchMoveActive = false;
 let touchTargetX = null;
 let activePointerId = null;
@@ -1121,7 +1124,9 @@ function render() {
 
 	ctx.clearRect(-20, -20, W + 40, H + 40);
 	ctx.drawImage(bgImg, 0, 0, W, H);
-	drawVisualScene();
+	if (!LOW_PERF_MODE) {
+		drawVisualScene();
+	}
 
 	const dusk = clamp((game.level - 1) / 10, 0, 0.4);
 	ctx.fillStyle = `rgba(10,15,35,${dusk})`;
@@ -1190,9 +1195,17 @@ function render() {
 }
 
 function frame(now) {
+	if (LOW_PERF_MODE && now - lastLowPerfFrameTime < LOW_PERF_FRAME_MS) {
+		requestAnimationFrame(frame);
+		return;
+	}
+	lastLowPerfFrameTime = now;
+
 	const dt = clamp((now - lastTime) / 1000, 0, LOW_PERF_MODE ? 0.02 : 0.025);
 	lastTime = now;
-	updateVisualScene(dt);
+	if (!LOW_PERF_MODE) {
+		updateVisualScene(dt);
+	}
 
 	if (game.state === "running") {
 		updateRunning(dt);
@@ -1312,6 +1325,7 @@ document.addEventListener("keyup", (e) => {
 });
 
 canvas.addEventListener("pointerdown", (e) => {
+	e.preventDefault();
 	const p = getCanvasCoords(e);
 	if (game.state !== "running") {
 		handleOverlayPointer(p.x, p.y);
@@ -1327,6 +1341,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
+	e.preventDefault();
 	if (USE_TOUCH_BUTTONS) return;
 	if (activePointerId !== null && e.pointerId !== activePointerId) return;
 	if (!touchMoveActive || game.state !== "running") return;
@@ -1335,6 +1350,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 canvas.addEventListener("pointerup", (e) => {
+	e.preventDefault();
 	if (activePointerId !== null && e.pointerId !== activePointerId) return;
 	try {
 		canvas.releasePointerCapture(e.pointerId);
@@ -1343,16 +1359,17 @@ canvas.addEventListener("pointerup", (e) => {
 });
 
 canvas.addEventListener("pointercancel", (e) => {
+	e.preventDefault();
 	if (activePointerId !== null && e.pointerId !== activePointerId) return;
 	clearTouchInput();
 });
 
 canvas.addEventListener("pointerleave", () => {
-	if (game.state === "running") clearTouchInput();
+	if (!IS_TOUCH_DEVICE && game.state === "running") clearTouchInput();
 });
 
 canvas.addEventListener("pointerout", () => {
-	if (game.state === "running") clearTouchInput();
+	if (!IS_TOUCH_DEVICE && game.state === "running") clearTouchInput();
 });
 
 if (!window.PointerEvent) {
@@ -1367,7 +1384,7 @@ if (!window.PointerEvent) {
 		}
 		touchMoveActive = true;
 		setTouchDirectionByX(p.x);
-	}, { passive: true });
+	}, { passive: false });
 
 	canvas.addEventListener("touchmove", (e) => {
 		if (USE_TOUCH_BUTTONS) return;
@@ -1376,7 +1393,7 @@ if (!window.PointerEvent) {
 		if (!t) return;
 		const p = getCanvasCoords(t);
 		setTouchDirectionByX(p.x);
-	}, { passive: true });
+	}, { passive: false });
 
 	canvas.addEventListener("touchend", clearTouchInput, { passive: true });
 	canvas.addEventListener("touchcancel", clearTouchInput, { passive: true });
@@ -1426,6 +1443,10 @@ if (USE_TOUCH_BUTTONS && touchControls) {
 			}
 		});
 	}
+}
+
+if (!USE_TOUCH_BUTTONS && touchControls) {
+	touchControls.style.display = "none";
 }
 
 initVisualScene();
